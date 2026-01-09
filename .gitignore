@@ -1,12 +1,12 @@
 # ============================================
-# 根目录 .gitignore - Time Attendance Project
-# 适用于 Go 后端 + Next.js 前端的 Monorepo
+# Root .gitignore - Time Attendance Project
+# Monorepo for Go Backend + Next.js Frontend
 # ============================================
 
 # ============================================
-# Go 相关
+# Go Related
 # ============================================
-# 编译后的二进制文件
+# Compiled binaries
 *.exe
 *.exe~
 *.dll
@@ -15,33 +15,33 @@
 *.test
 *.out
 
-# Go 工作区文件
+# Go workspace files
 go.work
 go.work.sum
 
-# 依赖目录
+# Dependency directories
 vendor/
 api/vendor/
 
-# Go 构建输出
+# Go build output
 api/bin/
 api/dist/
 api/cmd/**/bin/
 
-# Go 测试覆盖率
+# Go test coverage
 coverage.out
 *.coverprofile
 *.cover
 
 # ============================================
-# Node.js / Next.js 相关
+# Node.js / Next.js Related
 # ============================================
-# 依赖目录
+# Dependency directories
 node_modules/
 web/node_modules/
 **/node_modules/
 
-# Next.js 构建输出
+# Next.js build output
 .next/
 web/.next/
 out/
@@ -49,16 +49,16 @@ web/out/
 build/
 web/build/
 
-# Next.js 缓存
+# Next.js cache
 .next/cache/
 web/.next/cache/
 
-# 包管理器锁文件（可选：如果团队统一使用 pnpm，可以保留 pnpm-lock.yaml）
+# Package manager lock files (optional: if team uses pnpm, you can keep pnpm-lock.yaml)
 # package-lock.json
 # yarn.lock
-# pnpm-lock.yaml  # 如果需要版本锁定，可以注释掉这行
+# pnpm-lock.yaml  # Uncomment this line if you need version locking
 
-# Node.js 调试日志
+# Node.js debug logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -71,7 +71,7 @@ next-env.d.ts
 web/next-env.d.ts
 
 # ============================================
-# 环境变量和配置文件
+# Environment Variables and Config Files
 # ============================================
 .env
 .env.*
@@ -83,13 +83,13 @@ web/next-env.d.ts
 .env.production.local
 *.local
 
-# 配置文件（包含敏感信息）
+# Config files (contain sensitive information)
 config.local.*
 secrets.*
 *.secret
 
 # ============================================
-# IDE 和编辑器
+# IDE and Editors
 # ============================================
 # VSCode
 .vscode/
@@ -120,7 +120,7 @@ secrets.*
 *.sublime-workspace
 
 # ============================================
-# 操作系统文件
+# Operating System Files
 # ============================================
 # macOS
 .DS_Store
@@ -148,7 +148,7 @@ $RECYCLE.BIN/
 .Trash-*
 
 # ============================================
-# 日志文件
+# Log Files
 # ============================================
 *.log
 logs/
@@ -156,7 +156,7 @@ logs/
 log/
 
 # ============================================
-# 数据库文件
+# Database Files
 # ============================================
 # SQLite
 *.db
@@ -165,12 +165,12 @@ log/
 *.db-shm
 *.db-wal
 
-# 数据库备份
+# Database backups
 *.sql.backup
 *.dump
 
 # ============================================
-# 临时文件和缓存
+# Temporary Files and Cache
 # ============================================
 tmp/
 temp/
@@ -182,9 +182,9 @@ temp/
 .vercel/
 
 # ============================================
-# CI/CD 相关
+# CI/CD Related
 # ============================================
-# GitHub Actions 临时文件
+# GitHub Actions temporary files
 .github/workflows/.env
 .github/workflows/secrets/
 
@@ -194,7 +194,7 @@ temp/
 # Jenkins
 .jenkins/
 
-# 构建产物（CI/CD 会重新构建）
+# Build artifacts (CI/CD will rebuild these)
 dist/
 build/
 *.tar.gz
@@ -207,9 +207,9 @@ docker-compose.override.yml
 *.dockerignore.local
 
 # ============================================
-# 测试和覆盖率报告
+# Testing and Coverage Reports
 # ============================================
-# 测试覆盖率
+# Test coverage
 coverage/
 .nyc_output/
 *.lcov
@@ -219,21 +219,21 @@ coverage/
 .jest-cache/
 
 # ============================================
-# 文档生成
+# Documentation Generation
 # ============================================
-# Swagger/OpenAPI 生成的文件（如果自动生成）
+# Swagger/OpenAPI generated files (if auto-generated)
 api/docs/swagger.json
 api/docs/swagger.yaml
 
 # ============================================
-# 其他
+# Miscellaneous
 # ============================================
-# 备份文件
+# Backup files
 *.bak
 *.backup
 *.old
 
-# 压缩文件（除非是必需的）
+# Compressed files (unless required)
 *.7z
 *.dmg
 *.gz
@@ -243,12 +243,12 @@ api/docs/swagger.yaml
 *.tar
 *.zip
 
-# 运行时文件
+# Runtime files
 *.pid
 *.seed
 *.pid.lock
 
-# 特定于项目的忽略
-# 如果有编译后的可执行文件在根目录
+# Project-specific ignores
+# Compiled executables in root directory
 time-attendance-be
 time-attendance-be.exe
