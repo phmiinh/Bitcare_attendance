@@ -120,10 +120,25 @@ func (s *Service) Update(ctx context.Context, id uint, req UserUpdateInput) (*Us
 		u.Status = *req.Status
 	}
 	if req.DepartmentID != nil {
-		if _, err := s.deptRepo.GetByID(ctx, *req.DepartmentID); err != nil {
-			return nil, response.Validation("Department not found", nil)
+		// If departmentId is explicitly set to 0 or nil, remove user from department
+		deptID := *req.DepartmentID
+
+		if deptID == 0 {
+			// Only update if currently has a department
+			if u.DepartmentID != nil {
+				u.DepartmentID = nil
+			}
+		} else {
+			// Validate department exists first
+			if _, err := s.deptRepo.GetByID(ctx, deptID); err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return nil, response.Validation("Department not found", nil)
+				}
+				return nil, response.Internal(err)
+			}
+			// Always update department ID when explicitly provided
+			u.DepartmentID = req.DepartmentID
 		}
-		u.DepartmentID = req.DepartmentID
 	}
 	if req.Birthday != nil {
 		if req.Birthday.Time != nil {
@@ -137,7 +152,12 @@ func (s *Service) Update(ctx context.Context, id uint, req UserUpdateInput) (*Us
 	if err := s.repo.Update(ctx, u); err != nil {
 		return nil, response.Internal(err)
 	}
-	return s.repo.GetByID(ctx, u.ID)
+	// Reload user with Department relationship to get updated department name
+	updated, err := s.repo.GetByID(ctx, u.ID)
+	if err != nil {
+		return nil, response.Internal(err)
+	}
+	return updated, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id uint) error {

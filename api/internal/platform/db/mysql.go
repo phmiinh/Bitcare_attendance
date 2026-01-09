@@ -6,12 +6,6 @@ import (
 	"time"
 
 	"time-attendance-be/internal/config"
-	"time-attendance-be/internal/modules/attendance"
-	"time-attendance-be/internal/modules/department"
-	"time-attendance-be/internal/modules/leave"
-	"time-attendance-be/internal/modules/notes"
-	"time-attendance-be/internal/modules/user"
-	"time-attendance-be/internal/modules/workcalendar"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -55,29 +49,7 @@ func NewMySQL(cfg *config.Config, log *zap.Logger) *gorm.DB {
 		db = db.Debug()
 	}
 
-	// Auto migrate all models
-	// NOTE: AutoMigrate only adds missing tables/columns/indexes, it NEVER deletes data or tables.
-	// If you need to drop tables, use migration files (api/migrations/) with a migration tool.
-	// AutoMigrate is safe to run on every startup - it won't affect existing data.
-	if err := autoMigrate(db); err != nil {
-		log.Fatal("failed auto-migrate", zap.Error(err))
-	}
-
 	return db
-}
-
-func autoMigrate(db *gorm.DB) error {
-	models := []interface{}{
-		&department.Department{},
-		&user.User{},
-		&attendance.Session{},
-		&notes.DailyNote{},
-		&leave.LeaveGrant{},
-		&leave.MonthlySummary{},
-		&workcalendar.WorkCalendar{},
-		// &leave.LeaveUsage{}, // Removed: using monthly summary instead
-	}
-	return db.AutoMigrate(models...)
 }
 
 // WithTx executes a function within a database transaction.

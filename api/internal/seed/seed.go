@@ -23,15 +23,41 @@ func Seed(db *gorm.DB, cfg *config.Config, log *zap.Logger) {
 
 	tx := db.Begin()
 
-	// Create Departments
-	depts := []department.Department{
-		{Name: "Engineering", Code: strPtr("ENG")},
-		{Name: "Product", Code: strPtr("PROD")},
-		{Name: "Design", Code: strPtr("DES")},
+	// Create Departments (skip if already exist)
+	deptNames := []struct {
+		Name string
+		Code *string
+	}{
+		{"Engineering", strPtr("ENG")},
+		{"Product", strPtr("PROD")},
+		{"Design", strPtr("DES")},
 	}
-	if err := tx.Create(&depts).Error; err != nil {
+	
+	var depts []department.Department
+	for _, d := range deptNames {
+		var dept department.Department
+		result := tx.Where("name = ?", d.Name).First(&dept)
+		if result.Error == gorm.ErrRecordNotFound {
+			// Department doesn't exist, create it
+			newDept := department.Department{Name: d.Name, Code: d.Code}
+			if err := tx.Create(&newDept).Error; err != nil {
+				tx.Rollback()
+				log.Fatal("failed to seed department", zap.String("name", d.Name), zap.Error(err))
+			}
+			depts = append(depts, newDept)
+		} else if result.Error != nil {
+			tx.Rollback()
+			log.Fatal("failed to check department", zap.String("name", d.Name), zap.Error(result.Error))
+		} else {
+			// Department exists, use it
+			depts = append(depts, dept)
+		}
+	}
+	
+	// Ensure we have at least 3 departments for seed data
+	if len(depts) < 3 {
 		tx.Rollback()
-		log.Fatal("failed to seed departments", zap.Error(err))
+		log.Fatal("failed to seed departments: not enough departments created")
 	}
 
 	// Create Admin User

@@ -203,7 +203,7 @@ export function DayDetailsSheet({
     }
 
     if (mode === "user" || (mode === "admin" && userId)) {
-      loadNote()
+    loadNote()
     }
   }, [open, user, workDate, mode, userId])
 
@@ -560,25 +560,25 @@ export function DayDetailsSheet({
                 />
 
                 {mode === "user" && (
-                  <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2">
                     {isNoteEditing && hasExisting ? (
-                      <Button variant="outline" className="rounded-xl gap-2" onClick={cancelEdit} disabled={isSaving}>
-                        <X className="h-4 w-4" />
-                        {labels.noteCancel}
-                      </Button>
-                    ) : null}
+                    <Button variant="outline" className="rounded-xl gap-2" onClick={cancelEdit} disabled={isSaving}>
+                      <X className="h-4 w-4" />
+                      {labels.noteCancel}
+                    </Button>
+                  ) : null}
 
                     {isNoteEditing ? (
-                      <Button
-                        className="rounded-xl gap-2"
-                        onClick={saveNote}
-                        disabled={isSaving || !noteContent.trim() || (hasExisting && !hasChanges)}
-                      >
-                        {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        {hasExisting ? labels.noteSaveChanges : labels.noteSaved}
-                      </Button>
-                    ) : null}
-                  </div>
+                    <Button
+                      className="rounded-xl gap-2"
+                      onClick={saveNote}
+                      disabled={isSaving || !noteContent.trim() || (hasExisting && !hasChanges)}
+                    >
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      {hasExisting ? labels.noteSaveChanges : labels.noteSaved}
+                    </Button>
+                  ) : null}
+                </div>
                 )}
               </>
             )}
@@ -601,7 +601,7 @@ export function DayDetailsSheet({
               >
                   <RefreshCw className="h-4 w-4" />
                   {t.users.detail.recalculateSummary}
-                </Button>
+          </Button>
             </div>
           )}
 

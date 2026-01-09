@@ -525,6 +525,24 @@ export const adminApi = {
     return apiFetch<Department[]>("/admin/departments", { method: "GET" })
   },
 
+  async createDepartment(data: { name: string; code?: string }): Promise<ApiResponse<Department>> {
+    return apiFetch<Department>("/admin/departments", {
+      method: "POST",
+      json: data,
+    })
+  },
+
+  async updateDepartment(id: number, data: { name?: string; code?: string }): Promise<ApiResponse<Department>> {
+    return apiFetch<Department>(`/admin/departments/${id}`, {
+      method: "PATCH",
+      json: data,
+    })
+  },
+
+  async deleteDepartment(id: number): Promise<ApiResponse<void>> {
+    return apiFetch<void>(`/admin/departments/${id}`, { method: "DELETE" })
+  },
+
   async getUserAttendance(userId: number, month?: string): Promise<ApiResponse<AttendanceRow[]>> {
     await delay(600)
 

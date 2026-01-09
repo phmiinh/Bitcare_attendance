@@ -140,7 +140,7 @@ func (h *Handler) UpsertDay(c *fiber.Ctx) error {
 			after,
 			"",
 		)
-	}
+}
 
 	// Recalculate leave_monthly_summary for all users in this month
 	// because work calendar change affects expected units calculation

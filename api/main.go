@@ -9,7 +9,6 @@ import (
 
 	"time-attendance-be/internal/app/bootstrap"
 	"time-attendance-be/internal/config"
-	"time-attendance-be/internal/seed"
 )
 import _ "github.com/joho/godotenv/autoload"
 
@@ -17,9 +16,6 @@ func main() {
 	cfg := config.Load()
 
 	container := bootstrap.NewContainer(cfg)
-
-	// Seed database on startup if needed
-	seed.Seed(container.DB, container.Cfg, container.Logger)
 
 	app := bootstrap.NewServer(container)
 	bootstrap.RegisterRoutes(app, container)

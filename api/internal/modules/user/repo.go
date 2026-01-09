@@ -31,7 +31,12 @@ func (r *Repo) Create(ctx context.Context, u *User) error {
 }
 
 func (r *Repo) Update(ctx context.Context, u *User) error {
-	return r.db.WithContext(ctx).Save(u).Error
+	// Không cho GORM tự động save association Department,
+	// nếu không nó có thể ghi đè lại department_id theo Department cũ.
+	u.Department = nil
+	return r.db.WithContext(ctx).
+		Session(&gorm.Session{FullSaveAssociations: false}).
+		Save(u).Error
 }
 
 func (r *Repo) Delete(ctx context.Context, id uint) error {

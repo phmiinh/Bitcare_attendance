@@ -143,8 +143,37 @@ func (h *Handler) AdminUpdate(c *fiber.Ctx) error {
 		return mapErr(err)
 	}
 
-	// Log audit
-	if h.auditSvc != nil {
+	// Only log audit if there are actual changes
+	afterResp := ToUserResponse(u)
+	hasChanges := false
+	if beforeResp != nil {
+		// Compare key fields that might have changed
+		if beforeResp.DepartmentID != nil && afterResp.DepartmentID != nil {
+			hasChanges = *beforeResp.DepartmentID != *afterResp.DepartmentID
+		} else if beforeResp.DepartmentID != afterResp.DepartmentID {
+			hasChanges = true
+		}
+		if !hasChanges && beforeResp.Name != afterResp.Name {
+			hasChanges = true
+		}
+		if !hasChanges && beforeResp.Email != afterResp.Email {
+			hasChanges = true
+		}
+		if !hasChanges && beforeResp.Role != afterResp.Role {
+			hasChanges = true
+		}
+		if !hasChanges && beforeResp.Status != afterResp.Status {
+			hasChanges = true
+		}
+		if !hasChanges && beforeResp.PaidLeave != afterResp.PaidLeave {
+			hasChanges = true
+		}
+	} else {
+		hasChanges = true // If no before state, log it
+	}
+
+	// Log audit only if there are actual changes
+	if hasChanges && h.auditSvc != nil {
 		_ = h.auditSvc.LogAdminAction(
 			c.Context(),
 			adminUser.ID,
@@ -152,7 +181,7 @@ func (h *Handler) AdminUpdate(c *fiber.Ctx) error {
 			"user",
 			strconv.FormatUint(uint64(id), 10),
 			beforeResp,
-			ToUserResponse(u),
+			afterResp,
 			"",
 		)
 	}
