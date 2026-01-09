@@ -1,0 +1,560 @@
+"use client"
+
+import { useEffect, useMemo, useState, Suspense } from "react"
+import { useAuth } from "@/lib/auth-context"
+import { useI18n } from "@/lib/i18n"
+import { attendanceApi, leaveApi } from "@/lib/api"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Download } from "lucide-react"
+import type { AttendanceRecord } from "@/lib/types"
+import { MonthCalendar, type DayData, type CalendarStatus } from "@/components/calendar/month-calendar"
+import { DayDetailsSheet } from "@/components/calendar/day-details-sheet"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+function toLocalYMD(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+function endOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0)
+}
+
+function eachDay(start: Date, end: Date) {
+  const days: Date[] = []
+  const cur = new Date(start)
+  while (cur <= end) {
+    days.push(new Date(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return days
+}
+
+function minutesSinceMidnight(input: string | null | undefined) {
+  if (!input) return null
+
+  // HH:MM:SS
+  if (/^\d{2}:\d{2}:\d{2}$/.test(input)) {
+    const [hh, mm] = input.split(":")
+    const h = Number(hh)
+    const m = Number(mm)
+    if (Number.isNaN(h) || Number.isNaN(m)) return null
+    return h * 60 + m
+  }
+
+  // ISO datetime
+  const d = new Date(input)
+  if (Number.isNaN(d.getTime())) return null
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+function monthKey(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}`
+}
+
+function parseMonthKey(v: string) {
+  const [y, m] = v.split("-")
+  const year = Number(y)
+  const month = Number(m)
+  if (!year || !month) return new Date()
+  return new Date(year, month - 1, 1)
+}
+
+function TimesheetContent() {
+  const { user } = useAuth()
+  const { t, language } = useI18n()
+
+  const [currentMonth, setCurrentMonth] = useState(() => new Date())
+  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [summary, setSummary] = useState<{
+    workedUnits: number
+    missingUnits: number
+  } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const [selectedDay, setSelectedDay] = useState<DayData | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      if (!user) return
+      setIsLoading(true)
+      try {
+        const from = toLocalYMD(startOfMonth(currentMonth))
+        const to = toLocalYMD(endOfMonth(currentMonth))
+        const year = currentMonth.getFullYear()
+        const month = currentMonth.getMonth() + 1
+        
+        const [attendanceRes, leaveRes] = await Promise.all([
+          attendanceApi.listMe({ startDate: from, endDate: to }),
+          leaveApi.getSummary({ year, month }),
+        ])
+        
+        if (attendanceRes.data) {
+          setRecords(attendanceRes.data.rows as any)
+        } else {
+          setRecords([])
+        }
+        
+        if (leaveRes.data) {
+          setSummary({
+            workedUnits: leaveRes.data.workedUnits ?? 0,
+            missingUnits: leaveRes.data.missingUnits ?? 0,
+          })
+        } else {
+          setSummary({ workedUnits: 0, missingUnits: 0 })
+        }
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    load()
+  }, [user, currentMonth])
+
+  const days: DayData[] = useMemo(() => {
+    const from = startOfMonth(currentMonth)
+    const to = endOfMonth(currentMonth)
+
+    const byDate = new Map<string, AttendanceRecord>()
+    for (const r of records) byDate.set(r.workDate, r)
+
+    const allDays = eachDay(from, to)
+
+    return allDays.map((d) => {
+      const key = toLocalYMD(d)
+      const r = byDate.get(key)
+
+      // Check if this is a leave day
+      const isLeave = r?.isLeave === true
+      const isUnpaidLeave = r?.isUnpaidLeave === true
+
+      // Skip weekends (Saturday=6, Sunday=0)
+      const weekday = d.getDay()
+      const isWeekend = weekday === 6 || weekday === 0
+
+      if (!r) {
+        // No attendance record
+        if (isLeave) {
+          // Marked as leave - show as leave (red)
+          return { date: d, status: "missing" as CalendarStatus }
+        }
+        if (isWeekend) {
+          // Weekend - show as muted/disabled
+          return { date: d, status: "absent" as CalendarStatus }
+        }
+        return { date: d, status: "absent" as CalendarStatus }
+      }
+
+      // If marked as leave, prioritize showing leave status (always show as red/missing)
+      if (isLeave) {
+        return {
+          date: d,
+          status: "missing" as CalendarStatus, // Always show leave days as red
+          checkInAt: r.checkInAt,
+          checkOutAt: r.checkOutAt,
+          workedMinutes: r.workedMinutes,
+          dayCredit: "NONE" as const,
+        }
+      }
+
+      let status: CalendarStatus = "absent"
+      if (r.status === "MISSING") status = "missing"
+      else if (r.status === "OPEN") {
+        // Đã check-in nhưng chưa check-out
+        if (r.checkInAt && !r.checkOutAt) {
+          // Sẽ được xác định sau khi tính toán late/early leave
+          status = "working"
+        } else {
+          status = "missing"
+        }
+      } else if (r.status === "CLOSED") status = "present"
+
+      // Thresholds (minutes since midnight) - Updated logic
+      const MORNING_LATE_FROM = 8 * 60 + 31 // 08:31 (từ 8h31 trở đi mới đi muộn, 8h30 là đúng giờ)
+      const MORNING_OFF_FROM = 9 * 60 + 30 // >09:30 => nghỉ buổi sáng
+
+      const NOON_EARLY_LEAVE_BEFORE = 12 * 60 // <12:00 => về sớm sáng
+
+      const AFTERNOON_LATE_FROM = 13 * 60 + 31 // >13:30 => đi muộn chiều (nếu nghỉ sáng, từ 13h31)
+      const AFTERNOON_OFF_BEFORE = 15 * 60 + 30 // <15:30 => nghỉ buổi chiều
+      const AFTERNOON_EARLY_LEAVE_BEFORE = 18 * 60 // <18:00 => về sớm chiều (giờ kết thúc làm việc chuẩn)
+
+      const ciMin = minutesSinceMidnight(r.checkInAt)
+      const coMin = minutesSinceMidnight(r.checkOutAt)
+
+      // We track both kinds of minutes (can show both)
+      let lateMinutes = 0
+      let earlyLeaveMinutes = 0
+
+      // Determine morning state
+      let isAbsentMorning = false
+      let isLateMorning = false
+
+      if (!r.checkInAt || ciMin === null) {
+        // no check-in => nghỉ (treat as absent for whole day)
+        status = "absent"
+        isAbsentMorning = true
+        isAbsentAfternoon = true
+      } else {
+        if (ciMin > MORNING_OFF_FROM) {
+          // Check-in after 09:30 => nghỉ buổi sáng
+          isAbsentMorning = true
+        } else if (ciMin >= MORNING_LATE_FROM && ciMin <= MORNING_OFF_FROM) {
+          // 08:31-09:30 => đi muộn sáng (8h30 là đúng giờ)
+          isLateMorning = true
+          lateMinutes = Math.max(lateMinutes, ciMin - (8 * 60 + 30)) // Tính từ 8h30
+        }
+      }
+
+      // Determine afternoon state
+      let isAbsentAfternoon = false
+      let isLateAfternoon = false
+      let isEarlyLeaveMorning = false
+      let isEarlyLeaveAfternoon = false
+
+      if (coMin !== null) {
+        // Nếu checkout trước 12h: nghỉ buổi chiều + về sớm sáng (tính từ 12h)
+        if (coMin < NOON_EARLY_LEAVE_BEFORE) {
+          isAbsentAfternoon = true
+          isEarlyLeaveMorning = true
+          earlyLeaveMinutes = Math.max(earlyLeaveMinutes, NOON_EARLY_LEAVE_BEFORE - coMin)
+        }
+        // Nếu checkout từ 12h đến trước 15:30: chỉ nghỉ buổi chiều (không tính về sớm)
+        else if (coMin < AFTERNOON_OFF_BEFORE) {
+          isAbsentAfternoon = true
+        }
+        // Nếu checkout từ 15:30 đến trước 18h: về sớm chiều (tính từ 18h)
+        else if (coMin < AFTERNOON_EARLY_LEAVE_BEFORE) {
+          isEarlyLeaveAfternoon = true
+          earlyLeaveMinutes = Math.max(earlyLeaveMinutes, AFTERNOON_EARLY_LEAVE_BEFORE - coMin)
+        }
+      }
+
+      // Late afternoon: Nếu nghỉ sáng và checkin sau 13h30 => đi muộn chiều
+      if (isAbsentMorning && r.checkInAt && ciMin !== null && ciMin > AFTERNOON_LATE_FROM) {
+        // Check if checkout is before 15:30 (nghỉ buổi chiều) or after (đi muộn chiều)
+        if (coMin !== null && coMin < AFTERNOON_OFF_BEFORE) {
+          isAbsentAfternoon = true
+        } else {
+          isLateAfternoon = true
+          lateMinutes = Math.max(lateMinutes, ciMin - (13 * 60 + 30)) // Tính từ 13h30
+        }
+      }
+
+      // Build final status (we still keep "missing" from backend if needed)
+      // Nếu status là "working" (đã check-in chưa check-out), vẫn cần xét đi muộn/về sớm
+      if (status !== "missing") {
+        if (status === "absent") {
+          // keep absent
+        } else if (status === "working") {
+          // Đang làm nhưng có đi muộn/về sớm thì vẫn hiển thị status tương ứng
+          // Ưu tiên các trường hợp kết hợp để hiển thị đủ cả đi muộn và về sớm
+          if (isAbsentMorning && isLateAfternoon) status = "absentMorning_lateAfternoon"
+          else if (isAbsentMorning && isEarlyLeaveAfternoon) status = "absentMorning_earlyLeaveAfternoon"
+          else if (isAbsentAfternoon && isLateMorning) status = "lateMorning_absentAfternoon"
+          else if (isAbsentAfternoon && isEarlyLeaveMorning) status = "absentAfternoon_earlyLeaveMorning"
+          else if (isLateMorning && isEarlyLeaveAfternoon) status = "lateMorning_earlyLeaveAfternoon"
+          else if (isLateAfternoon && isEarlyLeaveAfternoon) status = "lateAfternoon_earlyLeaveAfternoon"
+          else if (isLateMorning && isEarlyLeaveMorning) status = "lateMorning" // Đi muộn sáng + về sớm sáng (hiếm)
+          else if (isLateMorning) status = "lateMorning"
+          else if (isAbsentMorning) status = "absentMorning"
+          else if (isAbsentAfternoon) status = "absentAfternoon"
+          else if (isLateAfternoon) status = "lateAfternoon"
+          else if (isEarlyLeaveMorning) status = "earlyLeaveMorning"
+          else if (isEarlyLeaveAfternoon) status = "earlyLeaveAfternoon"
+          // Nếu không có đi muộn/về sớm gì thì giữ nguyên "working"
+        } else {
+          // if backend said present/closed but no checkin handled above; else derive from flags
+          // Ưu tiên các trường hợp kết hợp để hiển thị đủ cả đi muộn và về sớm
+          if (isAbsentMorning && isAbsentAfternoon) status = "absent"
+          else if (isAbsentMorning && isLateAfternoon) status = "absentMorning_lateAfternoon"
+          else if (isAbsentMorning && isEarlyLeaveAfternoon) status = "absentMorning_earlyLeaveAfternoon"
+          else if (isAbsentAfternoon && isLateMorning) status = "lateMorning_absentAfternoon"
+          else if (isAbsentAfternoon && isEarlyLeaveMorning) status = "absentAfternoon_earlyLeaveMorning"
+          else if (isLateMorning && isEarlyLeaveAfternoon) status = "lateMorning_earlyLeaveAfternoon"
+          else if (isLateAfternoon && isEarlyLeaveAfternoon) status = "lateAfternoon_earlyLeaveAfternoon"
+          else if (isLateMorning && isEarlyLeaveMorning) status = "lateMorning" // Đi muộn sáng + về sớm sáng (hiếm)
+          else if (isLateMorning) status = "lateMorning"
+          else if (isAbsentMorning) status = "absentMorning"
+          else if (isAbsentAfternoon) status = "absentAfternoon"
+          else if (isLateAfternoon) status = "lateAfternoon"
+          else if (isEarlyLeaveMorning) status = "earlyLeaveMorning"
+          else if (isEarlyLeaveAfternoon) status = "earlyLeaveAfternoon"
+          else status = "present"
+        }
+      }
+
+      // If dayUnit is 0 (not counted), show as "missing" (red) - same as leave days
+      // This ensures consistency: days that don't count as work are shown as "Nghỉ" (red)
+      // This check must be AFTER all status logic to ensure it takes priority
+      if (r.dayUnit === 0) {
+        status = "missing"
+      }
+
+      // Chỉ set earlyLeaveMinutes nếu đã checkout hoàn tất (status = "CLOSED" và có checkOutAt)
+      // Nếu chưa checkout hoặc status không phải CLOSED thì không tính về sớm
+      const isClosed = r.status === "CLOSED"
+      const finalEarlyLeaveMinutes = (isClosed && r.checkOutAt && coMin !== null) ? (earlyLeaveMinutes || undefined) : undefined
+
+      return {
+        date: d,
+        status,
+        checkInAt: r.checkInAt,
+        checkOutAt: r.checkOutAt,
+        workedMinutes: r.workedMinutes,
+        lateMinutes: lateMinutes || undefined,
+        earlyLeaveMinutes: finalEarlyLeaveMinutes,
+        dayCredit: r.dayUnit >= 1 ? "FULL" : r.dayUnit >= 0.5 ? "HALF" : "NONE",
+      }
+    })
+  }, [records, currentMonth])
+
+  const calendarLabels = useMemo(
+    () => ({
+      monthTitle: (d: Date) =>
+        d.toLocaleDateString(language === "vi" ? "vi-VN" : "en-US", { month: "long", year: "numeric" }),
+      weekdays:
+        language === "vi" ? ["T2", "T3", "T4", "T5", "T6", "T7", "CN"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      tooltip: {
+        checkIn: t.timesheet.checkIn,
+        checkOut: t.timesheet.checkOut,
+        worked: t.timesheet.workedTime,
+        late: t.timesheet.lateMinutes,
+        earlyLeave: t.timesheet.earlyLeaveMinutes,
+      },
+      status: {
+        present: t.timesheet.present,
+        working: t.timesheet.working,
+        lateMorning: t.timesheet.lateMorning,
+        absentMorning: t.timesheet.absentMorning,
+        earlyLeaveMorning: t.timesheet.earlyLeaveMorning,
+        lateAfternoon: t.timesheet.lateAfternoon,
+        absentAfternoon: t.timesheet.absentAfternoon,
+        earlyLeaveAfternoon: t.timesheet.earlyLeaveAfternoon,
+        lateMorning_earlyLeaveAfternoon: t.timesheet.lateMorningEarlyLeaveAfternoon,
+        lateMorning_absentAfternoon: t.timesheet.lateMorningAbsentAfternoon,
+        absentMorning_lateAfternoon: t.timesheet.absentMorningLateAfternoon,
+        absentMorning_earlyLeaveAfternoon: t.timesheet.absentMorningEarlyLeaveAfternoon,
+        absentAfternoon_earlyLeaveMorning: t.timesheet.absentAfternoonEarlyLeaveMorning,
+        lateAfternoon_earlyLeaveAfternoon: t.timesheet.lateAfternoonEarlyLeaveAfternoon,
+        missing: t.timesheet.missing,
+        absent: t.timesheet.absent,
+      } as Record<CalendarStatus, string>,
+      noData: t.timesheet.noRecords,
+    }),
+    [t, language],
+  )
+
+  const sheetLabels = useMemo(
+    () => ({
+      title: t.timesheet.dayDetails,
+      status: t.timesheet.status,
+      checkIn: t.timesheet.checkIn,
+      checkOut: t.timesheet.checkOut,
+      worked: t.timesheet.workedTime,
+      late: t.timesheet.lateMinutes,
+      earlyLeave: t.timesheet.earlyLeaveMinutes,
+      close: t.common.cancel,
+      statusLabels: {
+        present: t.timesheet.present,
+        working: t.timesheet.working,
+        lateMorning: t.timesheet.lateMorning,
+        absentMorning: t.timesheet.absentMorning,
+        earlyLeaveMorning: t.timesheet.earlyLeaveMorning,
+        lateAfternoon: t.timesheet.lateAfternoon,
+        absentAfternoon: t.timesheet.absentAfternoon,
+        earlyLeaveAfternoon: t.timesheet.earlyLeaveAfternoon,
+        lateMorning_earlyLeaveAfternoon: t.timesheet.lateMorningEarlyLeaveAfternoon,
+        lateMorning_absentAfternoon: t.timesheet.lateMorningAbsentAfternoon,
+        absentMorning_lateAfternoon: t.timesheet.absentMorningLateAfternoon,
+        absentMorning_earlyLeaveAfternoon: t.timesheet.absentMorningEarlyLeaveAfternoon,
+        absentAfternoon_earlyLeaveMorning: t.timesheet.absentAfternoonEarlyLeaveMorning,
+        lateAfternoon_earlyLeaveAfternoon: t.timesheet.lateAfternoonEarlyLeaveAfternoon,
+        missing: t.timesheet.missing,
+        absent: t.timesheet.absent,
+      } as Record<CalendarStatus, string>,
+      dayCredit: t.timesheet.dayCredit,
+      dayCreditLabels: {
+        FULL: t.timesheet.dayCreditValues.FULL,
+        HALF: t.timesheet.dayCreditValues.HALF,
+        NONE: t.timesheet.dayCreditValues.NONE,
+      },
+
+      noteTitle: t.notes.title,
+      notePlaceholder: t.notes.placeholder,
+      noteSaved: t.common.save,
+      noteEdit: t.notes.edit,
+      noteSaveChanges: t.notes.saveChanges,
+      noteCancel: t.notes.cancelEdit,
+      noteSaveSuccess: t.notes.saveSuccess,
+      noteSaveError: t.notes.saveError,
+      noteLoading: t.notes.loadingNote,
+    }),
+    [t, language],
+  )
+
+  const monthOptions = useMemo(() => {
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const startYear = currentYear - 1
+    const endYear = currentYear + 1
+
+    const opts: { value: string; label: string }[] = []
+    for (let y = startYear; y <= endYear; y++) {
+      for (let m = 0; m < 12; m++) {
+        const d = new Date(y, m, 1)
+        opts.push({
+          value: monthKey(d),
+          label: d.toLocaleDateString(language === "vi" ? "vi-VN" : "en-US", { month: "long", year: "numeric" }),
+        })
+      }
+    }
+    return opts
+  }, [language])
+
+  // Calculate statistics from days data and summary
+  const stats = useMemo(() => {
+    let lateCount = 0
+    let earlyLeaveCount = 0
+
+    days.forEach((day) => {
+      const isLeaveDay = day.status === "missing" || day.dayCredit === "NONE"
+      // Ngày nghỉ buổi chiều cũng không nên đếm vào về sớm (đã tính vào "Nghỉ" rồi)
+      const isAbsentAfternoon = day.status === "absentAfternoon" || day.status === "lateMorning_absentAfternoon"
+      
+      // Đi muộn: Tính cả khi chưa checkout (status = OPEN hoặc CLOSED)
+      // Vì đi muộn được xác định ngay khi check-in
+      if (!isLeaveDay && day.checkInAt && day.lateMinutes && day.lateMinutes > 0) {
+        lateCount++
+      }
+      
+      // Về sớm: Chỉ tính khi đã checkout (status = CLOSED)
+      // Vì về sớm chỉ biết được khi đã checkout
+      // KHÔNG tính ngày nghỉ buổi chiều (đã tính vào "Nghỉ" rồi)
+      const hasCheckout = day.checkOutAt != null && day.checkOutAt !== "" && day.checkOutAt !== "--:--"
+      if (!isLeaveDay && !isAbsentAfternoon && hasCheckout && day.earlyLeaveMinutes && day.earlyLeaveMinutes > 0) {
+        earlyLeaveCount++
+      }
+    })
+
+    return {
+      workedUnits: summary ? Math.round(summary.workedUnits * 10) / 10 : 0, // Round to 1 decimal
+      missingUnits: summary ? Math.round(summary.missingUnits * 10) / 10 : 0, // Round to 1 decimal
+      lateCount,
+      earlyLeaveCount,
+    }
+  }, [days, summary])
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{t.timesheet.title}</h1>
+          <p className="text-muted-foreground">{t.timesheet.filterByDate}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="gap-2 rounded-xl border-border/50 bg-transparent">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">{t.timesheet.exportData}</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
+            {t.dashboard.quickStats}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="text-center">
+            <p className="text-2xl font-bold">{stats.workedUnits}</p>
+            <p className="text-[10px] uppercase text-muted-foreground">Công đã làm</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-destructive">{stats.missingUnits}</p>
+            <p className="text-[10px] uppercase text-muted-foreground">Nghỉ</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-orange-500">{stats.lateCount}</p>
+            <p className="text-[10px] uppercase text-muted-foreground">{t.timesheet.lateMinutes}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-bold text-blue-500">{stats.earlyLeaveCount}</p>
+            <p className="text-[10px] uppercase text-muted-foreground">{t.timesheet.earlyLeaveMinutes}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardHeader className="border-b border-border/50 px-6 py-4">
+          <div className="flex items-center justify-end gap-2">
+            <Select value={monthKey(currentMonth)} onValueChange={(v) => setCurrentMonth(parseMonthKey(v))}>
+              <SelectTrigger className="rounded-xl" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl max-h-72">
+                {monthOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setCurrentMonth(new Date())}>
+              {t.dateTime.thisMonth}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6">
+          {isLoading ? (
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: 28 }).map((_, i) => (
+                <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <MonthCalendar
+              currentMonth={currentMonth}
+              days={days}
+              onMonthChange={setCurrentMonth}
+              onDayClick={(d) => {
+                setSelectedDay(d)
+                setDrawerOpen(true)
+              }}
+              labels={calendarLabels}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      <DayDetailsSheet open={drawerOpen} onOpenChange={setDrawerOpen} day={selectedDay} labels={sheetLabels} />
+    </div>
+  )
+}
+
+export default function TimesheetPage() {
+  return (
+    <Suspense fallback={null}>
+      <TimesheetContent />
+    </Suspense>
+  )
+}

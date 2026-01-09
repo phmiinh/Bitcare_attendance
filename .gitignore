@@ -1,0 +1,254 @@
+# ============================================
+# 根目录 .gitignore - Time Attendance Project
+# 适用于 Go 后端 + Next.js 前端的 Monorepo
+# ============================================
+
+# ============================================
+# Go 相关
+# ============================================
+# 编译后的二进制文件
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go 工作区文件
+go.work
+go.work.sum
+
+# 依赖目录
+vendor/
+api/vendor/
+
+# Go 构建输出
+api/bin/
+api/dist/
+api/cmd/**/bin/
+
+# Go 测试覆盖率
+coverage.out
+*.coverprofile
+*.cover
+
+# ============================================
+# Node.js / Next.js 相关
+# ============================================
+# 依赖目录
+node_modules/
+web/node_modules/
+**/node_modules/
+
+# Next.js 构建输出
+.next/
+web/.next/
+out/
+web/out/
+build/
+web/build/
+
+# Next.js 缓存
+.next/cache/
+web/.next/cache/
+
+# 包管理器锁文件（可选：如果团队统一使用 pnpm，可以保留 pnpm-lock.yaml）
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml  # 如果需要版本锁定，可以注释掉这行
+
+# Node.js 调试日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+web/next-env.d.ts
+
+# ============================================
+# 环境变量和配置文件
+# ============================================
+.env
+.env.*
+!.env.example
+!.env.template
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.local
+
+# 配置文件（包含敏感信息）
+config.local.*
+secrets.*
+*.secret
+
+# ============================================
+# IDE 和编辑器
+# ============================================
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ IDEA / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# 操作系统文件
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# 日志文件
+# ============================================
+*.log
+logs/
+*.log.*
+log/
+
+# ============================================
+# 数据库文件
+# ============================================
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# 数据库备份
+*.sql.backup
+*.dump
+
+# ============================================
+# 临时文件和缓存
+# ============================================
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+.turbo/
+.vercel/
+.vercel/
+
+# ============================================
+# CI/CD 相关
+# ============================================
+# GitHub Actions 临时文件
+.github/workflows/.env
+.github/workflows/secrets/
+
+# GitLab CI
+.gitlab-ci-local/
+
+# Jenkins
+.jenkins/
+
+# 构建产物（CI/CD 会重新构建）
+dist/
+build/
+*.tar.gz
+*.zip
+*.rar
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+*.dockerignore.local
+
+# ============================================
+# 测试和覆盖率报告
+# ============================================
+# 测试覆盖率
+coverage/
+.nyc_output/
+*.lcov
+.coveralls.yml
+
+# Jest
+.jest-cache/
+
+# ============================================
+# 文档生成
+# ============================================
+# Swagger/OpenAPI 生成的文件（如果自动生成）
+api/docs/swagger.json
+api/docs/swagger.yaml
+
+# ============================================
+# 其他
+# ============================================
+# 备份文件
+*.bak
+*.backup
+*.old
+
+# 压缩文件（除非是必需的）
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# 运行时文件
+*.pid
+*.seed
+*.pid.lock
+
+# 特定于项目的忽略
+# 如果有编译后的可执行文件在根目录
+time-attendance-be
+time-attendance-be.exe
