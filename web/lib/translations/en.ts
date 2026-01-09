@@ -304,5 +304,6 @@ export const en = {
   toast: {
     loginSuccess: "Signed in successfully",
     logoutSuccess: "Signed out successfully",
+    accessDenied: "You do not have permission to access this page",
   },
 } as const;

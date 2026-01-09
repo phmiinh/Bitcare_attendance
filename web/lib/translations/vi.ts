@@ -317,6 +317,7 @@ export const vi = {
   toast: {
     loginSuccess: "Đăng nhập thành công",
     logoutSuccess: "Đăng xuất thành công",
+    accessDenied: "Bạn không có quyền truy cập trang này",
   },
 }
 
