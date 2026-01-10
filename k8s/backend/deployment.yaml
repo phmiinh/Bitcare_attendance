@@ -4,23 +4,37 @@ metadata:
   name: api
   namespace: bitcare-attendance
   labels:
-    app: api
+    app.kubernetes.io/name: bitcare-attendance-api
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/part-of: bitcare-attendance
 spec:
   replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
-      app: api
+      app.kubernetes.io/name: bitcare-attendance-api
+      app.kubernetes.io/instance: production
   template:
     metadata:
       labels:
-        app: api
+        app.kubernetes.io/name: bitcare-attendance-api
+        app.kubernetes.io/instance: production
+        app.kubernetes.io/part-of: bitcare-attendance
     spec:
+      terminationGracePeriodSeconds: 30
       imagePullSecrets:
         - name: harbor-regcred
       containers:
         - name: api
-          # Initial placeholder image; GitLab CI will update the tag to $CI_COMMIT_SHORT_SHA
-          image: harbor.example.com/bitcare-attendance/api:latest
+          # CI job update-manifest will update this line on each build
+          # ArgoCD/kustomize will replace image tag from Application manifest
+          image: harbor.bitcare.local/bitcare-attendance/api:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

@@ -4,11 +4,14 @@ metadata:
   name: api
   namespace: bitcare-attendance
   labels:
-    app: api
+    app.kubernetes.io/name: bitcare-attendance-api
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/part-of: bitcare-attendance
 spec:
   type: ClusterIP
   selector:
-    app: api
+    app.kubernetes.io/name: bitcare-attendance-api
+    app.kubernetes.io/instance: production
   ports:
     - name: http
       port: 80

@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bitcare-attendance
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: bitcare-attendance
+    app.kubernetes.io/part-of: bitcare-attendance
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: http://100.118.234.235/minhpa/time_attendance.git
+    targetRevision: main
+    path: k8s
+    kustomize:
+      images:
+        - harbor.bitcare.local/bitcare-attendance/api:latest
+        - harbor.bitcare.local/bitcare-attendance/web:latest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: bitcare-attendance
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

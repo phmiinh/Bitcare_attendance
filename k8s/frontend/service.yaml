@@ -4,11 +4,14 @@ metadata:
   name: web
   namespace: bitcare-attendance
   labels:
-    app: web
+    app.kubernetes.io/name: bitcare-attendance-web
+    app.kubernetes.io/instance: production
+    app.kubernetes.io/part-of: bitcare-attendance
 spec:
   type: NodePort
   selector:
-    app: web
+    app.kubernetes.io/name: bitcare-attendance-web
+    app.kubernetes.io/instance: production
   ports:
     - name: http
       port: 80
