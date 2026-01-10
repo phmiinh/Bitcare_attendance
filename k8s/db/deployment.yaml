@@ -15,9 +15,11 @@ spec:
       labels:
         app: mysql
     spec:
+      imagePullSecrets:
+        - name: harbor-regcred
       containers:
         - name: mysql
-          image: bitnami/mariadb:11.4.2
+          image: harbor.bitcare.local/bitcare-attendance/mariadb:11.4.2
           imagePullPolicy: Always
           ports:
             - containerPort: 3306
