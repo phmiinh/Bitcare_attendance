@@ -34,7 +34,7 @@ stages:
         echo "${HARBOR_IP} ${HARBOR_URL}" >> /etc/hosts
         echo "Added Harbor IP to /etc/hosts: ${HARBOR_IP} -> ${HARBOR_URL}"
       fi
-    - echo "HARBOR_URL=${HARBOR_URL}"
+    - 'echo "HARBOR_URL=${HARBOR_URL}"'
 
 build-api:
   stage: build
@@ -89,7 +89,7 @@ update-manifest:
     - git config --global user.email "gitlab-ci@bitcare.local"
     - git config --global user.name "GitLab CI"
   script:
-    - echo "Updating k8s manifests with image tags: ${CI_COMMIT_SHORT_SHA}"
+    - 'echo "Updating k8s manifests with image tags: ${CI_COMMIT_SHORT_SHA}"'
     - |
       # Update backend image
       IMAGE_API="${HARBOR_URL}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}"
@@ -103,6 +103,6 @@ update-manifest:
       git commit -m "chore: update images to ${CI_COMMIT_SHORT_SHA}" || exit 0
     - |
       git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_COMMIT_BRANCH}" || exit 0
-    - echo "Manifest updated and committed successfully"
-    - echo "ArgoCD will automatically sync the new image tags"
+    - 'echo "Manifest updated and committed successfully"'
+    - 'echo "ArgoCD will automatically sync the new image tags"'
 
