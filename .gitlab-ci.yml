@@ -22,7 +22,7 @@ stages:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
   before_script:
-    - echo "Preparing Kaniko configuration..."
+    - 'echo "Preparing Kaniko configuration..."'
     - mkdir -p /kaniko/.docker
     - |
       cat <<EOF > /kaniko/.docker/config.json
@@ -42,7 +42,7 @@ build-api:
   tags:
     - atd
   script:
-    - echo "Building backend Docker image with Kaniko..."
+    - 'echo "Building backend Docker image with Kaniko..."'
     - |
       /kaniko/executor \
       --context "${CI_PROJECT_DIR}/api" \
@@ -61,7 +61,7 @@ build-web:
   tags:
     - atd
   script:
-    - echo "Building frontend Docker image with Kaniko..."
+    - 'echo "Building frontend Docker image with Kaniko..."'
     - |
       /kaniko/executor \
       --context "${CI_PROJECT_DIR}/web" \
