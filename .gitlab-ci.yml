@@ -93,7 +93,8 @@ update-manifests:
     - git status
     - git diff
     - git add k8s/backend/deployment.yaml k8s/frontend/deployment.yaml
-    - git commit -m "chore(gitops): update images to ${CI_COMMIT_SHORT_SHA}" || echo "No changes to commit"
+    - |
+      git commit -m "chore(gitops): update images to ${CI_COMMIT_SHORT_SHA}" || echo "No changes to commit"
     - |
       # Push back to GitLab using PAT (recommended)
       if [ -n "${GITOPS_TOKEN}" ]; then
