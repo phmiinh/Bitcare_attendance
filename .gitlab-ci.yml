@@ -24,7 +24,6 @@ pull-mariadb-image:
   variables:
     SKOPEO_NO_TLS_VERIFY: "true"
   before_script:
-    - apk add --no-cache curl ca-certificates
     - |
       HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
       # Force DNS resolution for Harbor (if HARBOR_IP is set)
