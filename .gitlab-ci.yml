@@ -36,17 +36,38 @@ pull-mariadb-image:
   script:
     - |
       HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
-      IMAGE_SOURCE="docker://docker.io/bitnami/mariadb:11.4.2"
-      # Use HTTP for Harbor to avoid certificate issues
+      # Bitnami MariaDB tags: try 11.4.0, 11.4, or latest
+      IMAGE_SOURCE="docker://docker.io/bitnami/mariadb:11.4.0"
       IMAGE_DEST="docker://${HARBOR_HOST}/${HARBOR_PROJECT}/mariadb:11.4.2"
       
-      echo "Copying ${IMAGE_SOURCE} to Harbor..."
+      echo "Copying ${IMAGE_SOURCE} to Harbor as ${IMAGE_DEST}..."
+      # Try 11.4.0 first, then fallback to 11.4, then latest
       skopeo copy \
         --src-tls-verify=false \
         --dest-tls-verify=false \
         --dest-creds="${HARBOR_USER}:${HARBOR_PASSWORD}" \
         ${IMAGE_SOURCE} \
-        ${IMAGE_DEST}
+        ${IMAGE_DEST} || \
+      (
+        echo "Tag 11.4.0 not found, trying 11.4..."
+        IMAGE_SOURCE="docker://docker.io/bitnami/mariadb:11.4"
+        skopeo copy \
+          --src-tls-verify=false \
+          --dest-tls-verify=false \
+          --dest-creds="${HARBOR_USER}:${HARBOR_PASSWORD}" \
+          ${IMAGE_SOURCE} \
+          ${IMAGE_DEST} || \
+        (
+          echo "Tag 11.4 not found, trying latest..."
+          IMAGE_SOURCE="docker://docker.io/bitnami/mariadb:latest"
+          skopeo copy \
+            --src-tls-verify=false \
+            --dest-tls-verify=false \
+            --dest-creds="${HARBOR_USER}:${HARBOR_PASSWORD}" \
+            ${IMAGE_SOURCE} \
+            ${IMAGE_DEST}
+        )
+      )
       
       echo "Image copied successfully: ${IMAGE_DEST}"
   tags:
