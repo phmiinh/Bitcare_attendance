@@ -1,0 +1,103 @@
+## GitLab CI for Time Attendance monorepo
+## Flow: GitLab (self-host) -> GitLab Runner (Kubernetes executor) -> Kaniko build -> Harbor -> ArgoCD GitOps -> Kubernetes
+##
+## Required GitLab CI variables (Settings > CI/CD > Variables):
+## - HARBOR_URL        : e.g. harbor.example.com
+## - HARBOR_PROJECT    : e.g. bitcare-attendance
+## - HARBOR_USER       : Harbor robot/user with push permission
+## - HARBOR_PASSWORD   : Password/token for the above user
+## - GITOPS_TOKEN      : (Recommended) GitLab Personal Access Token for pushing GitOps commits
+## - GIT_USER_NAME     : (Optional) git user.name for GitOps commits (default: gitops-bot)
+## - GIT_USER_EMAIL    : (Optional) git user.email for GitOps commits (default: gitops-bot@example.com)
+##
+## Notes:
+## - CI only builds & pushes images and updates manifests under k8s/.
+## - No kubectl / SSH is used; ArgoCD watches this repo/path and syncs to the cluster.
+
+stages:
+  - build
+  - update-manifests
+
+.kaniko-template:
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - |
+      cat > /kaniko/.docker/config.json <<EOF
+      {
+        "auths": {
+          "${HARBOR_URL}": {
+            "username": "${HARBOR_USER}",
+            "password": "${HARBOR_PASSWORD}"
+          }
+        }
+      }
+      EOF
+
+build-api:
+  stage: build
+  extends: .kaniko-template
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}/api"
+      --dockerfile "${CI_PROJECT_DIR}/api/Dockerfile"
+      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}"
+      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/api:latest"
+      --cache=true
+      --cache-repo="${HARBOR_URL}/${HARBOR_PROJECT}/cache"
+
+build-web:
+  stage: build
+  extends: .kaniko-template
+  script:
+    - >
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}/web"
+      --dockerfile "${CI_PROJECT_DIR}/web/Dockerfile"
+      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/web:${CI_COMMIT_SHORT_SHA}"
+      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/web:latest"
+      --cache=true
+      --cache-repo="${HARBOR_URL}/${HARBOR_PROJECT}/cache"
+
+update-manifests:
+  stage: update-manifests
+  image: alpine:3.20
+  needs:
+    - build-api
+    - build-web
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  before_script:
+    - apk add --no-cache git bash sed
+    - git config user.name "${GIT_USER_NAME:-gitops-bot}"
+    - git config user.email "${GIT_USER_EMAIL:-gitops-bot@example.com}"
+  script:
+    - cd "${CI_PROJECT_DIR}"
+    # Update backend image
+    - |
+      IMAGE_API="${HARBOR_URL}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}"
+      sed -i "s|image: .*api:.*|image: ${IMAGE_API}|g" k8s/backend/deployment.yaml
+    # Update frontend image
+    - |
+      IMAGE_WEB="${HARBOR_URL}/${HARBOR_PROJECT}/web:${CI_COMMIT_SHORT_SHA}"
+      sed -i "s|image: .*web:.*|image: ${IMAGE_WEB}|g" k8s/frontend/deployment.yaml
+    - git status
+    - git diff
+    - git add k8s/backend/deployment.yaml k8s/frontend/deployment.yaml
+    - git commit -m "chore(gitops): update images to ${CI_COMMIT_SHORT_SHA}" || echo "No changes to commit"
+    # Push back to GitLab using PAT (recommended)
+    - |
+      if [ -n "${GITOPS_TOKEN}" ]; then
+        # Use explicit HTTPS URL with OAuth2 token
+        REMOTE_URL="https://oauth2:${GITOPS_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        git push "${REMOTE_URL}" "HEAD:${CI_COMMIT_BRANCH}"
+      else
+        echo "GITOPS_TOKEN not set; falling back to CI_JOB_TOKEN if allowed."
+        # Fallback using CI_JOB_TOKEN (only if your GitLab instance/project policy allows push via CI_JOB_TOKEN)
+        REMOTE_URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        git push "${REMOTE_URL}" "HEAD:${CI_COMMIT_BRANCH}"
+      fi
+

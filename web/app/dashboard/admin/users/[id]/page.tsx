@@ -842,13 +842,25 @@ function UserAttendanceTab({ userId }: { userId: number }) {
         userId={userId}
         labels={sheetLabels}
         onEdit={async (data) => {
-          if (!selectedDay || !(selectedDay as any).sessionId) {
+          if (!selectedDay || !userId) {
             toast.error(t.users.detail.sessionNotFound)
             return
           }
-          const sessionId = (selectedDay as any).sessionId
+          
+          // Get sessionId if exists, otherwise use 0 to indicate new session
+          const sessionId = (selectedDay as any).sessionId || 0
+          
+          // Get workDate from selectedDay
+          const workDate = toLocalYMD(selectedDay.date)
+          
           try {
-            const res = await adminApi.updateAttendance(sessionId, data)
+            // Include userId and workDate when creating new session (sessionId = 0)
+            const updateData = {
+              ...data,
+              ...(sessionId === 0 ? { userId, workDate } : {}),
+            }
+            
+            const res = await adminApi.updateAttendance(sessionId, updateData)
             if (res.error) {
               toast.error(res.error.message || t.users.detail.updateAttendanceError)
               // Throw error to prevent form from closing
@@ -878,13 +890,18 @@ function UserAttendanceTab({ userId }: { userId: number }) {
               setRecords(convertedRecords as any)
               
               // Update selectedDay with new data
-              const updatedRecord = convertedRecords.find((r) => r.id === sessionId)
+              // If it was a new session, find it by workDate
+              const updatedRecord = sessionId === 0
+                ? convertedRecords.find((r) => r.workDate === workDate)
+                : convertedRecords.find((r) => r.id === sessionId)
+              
               if (updatedRecord && selectedDay) {
                 const updatedDay: DayData = {
                   ...selectedDay,
                   checkInAt: updatedRecord.checkInAt,
                   checkOutAt: updatedRecord.checkOutAt,
                   workedMinutes: updatedRecord.workedMinutes,
+                  sessionId: updatedRecord.id, // Update sessionId for future edits
                 }
                 setSelectedDay(updatedDay)
               }

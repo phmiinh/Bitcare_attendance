@@ -175,6 +175,9 @@ type UpdateSessionReq struct {
 	CheckInAt  *string `json:"checkInAt,omitempty"`
 	CheckOutAt *string `json:"checkOutAt,omitempty"`
 	Reason     string  `json:"reason"`
+	// Optional fields for creating new session if not found
+	UserID   *uint   `json:"userId,omitempty"`
+	WorkDate *string `json:"workDate,omitempty"`
 }
 
 func (h *Handler) UpdateSession(c *fiber.Ctx) error {
@@ -196,6 +199,8 @@ func (h *Handler) UpdateSession(c *fiber.Ctx) error {
 		CheckInAt:  req.CheckInAt,
 		CheckOutAt: req.CheckOutAt,
 		Reason:     req.Reason,
+		UserID:     req.UserID,
+		WorkDate:   req.WorkDate,
 	})
 	if err != nil {
 		return response.Validation(err.Error(), nil)

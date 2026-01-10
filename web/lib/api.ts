@@ -632,6 +632,8 @@ export const adminApi = {
     checkInAt?: string
     checkOutAt?: string
     reason: string
+    userId?: number
+    workDate?: string
   }): Promise<ApiResponse<AttendanceToday>> {
     return apiFetch<AttendanceToday>(`/admin/attendance/${id}`, {
       method: "PATCH",

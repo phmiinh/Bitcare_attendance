@@ -313,14 +313,82 @@ type UpdateSessionRequest struct {
 	CheckInAt  *string
 	CheckOutAt *string
 	Reason     string
+	// Optional fields for creating new session if not found
+	UserID   *uint
+	WorkDate *string
 }
 
 func (s *Service) UpdateSession(ctx context.Context, id uint, req UpdateSessionRequest) (*Session, error) {
 	session, err := s.attRepo.FindByID(ctx, id)
+	
+	// If session not found and we have userId and workDate, create a new session
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if req.UserID == nil || req.WorkDate == nil {
+			return nil, errors.New("session not found. Please provide userId and workDate to create a new session")
+		}
+		
+		// Create new session
+		loc := s.cfg.TimeLocation()
+		
+		// Parse work date
+		workDate, err := time.Parse("2006-01-02", *req.WorkDate)
+		if err != nil {
+			return nil, errors.New("invalid work date format")
+		}
+		workDate = time.Date(workDate.Year(), workDate.Month(), workDate.Day(), 0, 0, 0, 0, loc)
+		
+		// Parse check-in time (required for new session)
+		if req.CheckInAt == nil {
+			return nil, errors.New("checkInAt is required when creating a new session")
+		}
+		checkInAt, err := time.Parse(time.RFC3339, *req.CheckInAt)
+		if err != nil {
+			return nil, errors.New("invalid check-in time format")
+		}
+		checkInAt = checkInAt.In(loc)
+		
+		var checkOutAt *time.Time
+		var workedMinutes int
+		var dayUnit float32
+		status := "OPEN"
+		
+		if req.CheckOutAt != nil {
+			co, err := time.Parse(time.RFC3339, *req.CheckOutAt)
+			if err != nil {
+				return nil, errors.New("invalid check-out time format")
+			}
+			co = co.In(loc)
+			checkOutAt = &co
+			workedMinutes = ComputeWorkedMinutes(checkInAt, *checkOutAt, loc)
+			dayUnit = ComputeDayUnit(&checkInAt, checkOutAt, loc)
+			status = "CLOSED"
+		} else {
+			dayUnit = ComputeDayUnit(&checkInAt, nil, loc)
+		}
+		
+		newSession := &Session{
+			UserID:        *req.UserID,
+			WorkDate:      workDate,
+			CheckInAt:     checkInAt,
+			CheckOutAt:    checkOutAt,
+			WorkedMinutes: workedMinutes,
+			DayUnit:       dayUnit,
+			Status:        status,
+			CheckoutReason: &req.Reason,
+		}
+		
+		if err := s.attRepo.Create(newSession); err != nil {
+			return nil, err
+		}
+		
+		return newSession, nil
+	}
+	
 	if err != nil {
 		return nil, err
 	}
 
+	// Update existing session
 	loc := s.cfg.TimeLocation()
 
 	if req.CheckInAt != nil {
