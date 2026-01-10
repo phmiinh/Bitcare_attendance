@@ -82,20 +82,20 @@ update-manifests:
     - git config user.email "${GIT_USER_EMAIL:-gitops-bot@example.com}"
   script:
     - cd "${CI_PROJECT_DIR}"
-    # Update backend image
     - |
+      # Update backend image
       IMAGE_API="${HARBOR_URL}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}"
       sed -i "s|image: .*api:.*|image: ${IMAGE_API}|g" k8s/backend/deployment.yaml
-    # Update frontend image
     - |
+      # Update frontend image
       IMAGE_WEB="${HARBOR_URL}/${HARBOR_PROJECT}/web:${CI_COMMIT_SHORT_SHA}"
       sed -i "s|image: .*web:.*|image: ${IMAGE_WEB}|g" k8s/frontend/deployment.yaml
     - git status
     - git diff
     - git add k8s/backend/deployment.yaml k8s/frontend/deployment.yaml
     - git commit -m "chore(gitops): update images to ${CI_COMMIT_SHORT_SHA}" || echo "No changes to commit"
-    # Push back to GitLab using PAT (recommended)
     - |
+      # Push back to GitLab using PAT (recommended)
       if [ -n "${GITOPS_TOKEN}" ]; then
         # Use explicit HTTPS URL with OAuth2 token
         REMOTE_URL="https://oauth2:${GITOPS_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
