@@ -24,17 +24,25 @@ stages:
   before_script:
     - 'echo "Preparing Kaniko configuration..."'
     - mkdir -p /kaniko/.docker
+    # Extract Harbor hostname (remove http:// or https:// if present)
     - |
+      HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
+      echo "HARBOR_HOST=${HARBOR_HOST}"
+    - |
+      HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
       cat <<EOF > /kaniko/.docker/config.json
-      {"auths":{"${HARBOR_URL}":{"username":"${HARBOR_USER}","password":"${HARBOR_PASSWORD}"}}}
+      {"auths":{"${HARBOR_HOST}":{"username":"${HARBOR_USER}","password":"${HARBOR_PASSWORD}"}}}
       EOF
     # Force DNS resolution for Harbor inside the Kaniko container (if HARBOR_IP is set)
     - |
       if [ -n "${HARBOR_IP}" ]; then
-        echo "${HARBOR_IP} ${HARBOR_URL}" >> /etc/hosts
-        echo "Added Harbor IP to /etc/hosts: ${HARBOR_IP} -> ${HARBOR_URL}"
+        HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
+        echo "${HARBOR_IP} ${HARBOR_HOST}" >> /etc/hosts
+        echo "Added Harbor IP to /etc/hosts: ${HARBOR_IP} -> ${HARBOR_HOST}"
       fi
     - 'echo "HARBOR_URL=${HARBOR_URL}"'
+    - 'echo "HARBOR_USER=${HARBOR_USER}"'
+    - 'cat /kaniko/.docker/config.json | sed "s/${HARBOR_PASSWORD}/***MASKED***/g"'
 
 build-api:
   stage: build
@@ -44,11 +52,12 @@ build-api:
   script:
     - 'echo "Building backend Docker image with Kaniko..."'
     - |
+      HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
       /kaniko/executor \
       --context "${CI_PROJECT_DIR}/api" \
       --dockerfile "${CI_PROJECT_DIR}/api/Dockerfile" \
-      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}" \
-      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/api:latest" \
+      --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/api:${CI_COMMIT_SHORT_SHA}" \
+      --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/api:latest" \
       --insecure-pull \
       --skip-tls-verify \
       --cache=true \
@@ -63,11 +72,12 @@ build-web:
   script:
     - 'echo "Building frontend Docker image with Kaniko..."'
     - |
+      HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
       /kaniko/executor \
       --context "${CI_PROJECT_DIR}/web" \
       --dockerfile "${CI_PROJECT_DIR}/web/Dockerfile" \
-      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/web:${CI_COMMIT_SHORT_SHA}" \
-      --destination "${HARBOR_URL}/${HARBOR_PROJECT}/web:latest" \
+      --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/web:${CI_COMMIT_SHORT_SHA}" \
+      --destination "${HARBOR_HOST}/${HARBOR_PROJECT}/web:latest" \
       --insecure-pull \
       --skip-tls-verify \
       --cache=true \
