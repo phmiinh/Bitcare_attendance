@@ -17,32 +17,14 @@ stages:
   - build
   - deploy
 
-# Pull external images into Harbor (similar to DLP project pattern)
+# Pull external images into Harbor using skopeo (works better in Kubernetes executor)
 pull-mariadb-image:
   stage: build
-  image: docker:latest
-  services:
-    - name: docker:dind
-      alias: docker
-      command: ["--insecure-registry=harbor.bitcare.local"]
+  image: quay.io/skopeo/stable:latest
   variables:
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_DRIVER: overlay2
-    DOCKER_HOST: "tcp://docker:2375"
+    SKOPEO_NO_TLS_VERIFY: "true"
   before_script:
     - apk add --no-cache curl ca-certificates
-    - |
-      # Wait for Docker daemon to be ready
-      echo "Waiting for Docker daemon..."
-      for i in $(seq 1 30); do
-        if docker info >/dev/null 2>&1; then
-          echo "Docker daemon is ready!"
-          break
-        fi
-        echo "Waiting for Docker daemon... ($i/30)"
-        sleep 1
-      done
-      docker info || (echo "Docker daemon failed to start" && exit 1)
     - |
       HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
       # Force DNS resolution for Harbor (if HARBOR_IP is set)
@@ -50,29 +32,24 @@ pull-mariadb-image:
         echo "${HARBOR_IP} ${HARBOR_HOST}" >> /etc/hosts
         echo "Added Harbor IP to /etc/hosts: ${HARBOR_IP} -> ${HARBOR_HOST}"
       fi
-      echo "Logging into Harbor: ${HARBOR_HOST}"
-      # Try HTTPS first, fallback to HTTP if certificate issue
-      echo "${HARBOR_PASSWORD}" | docker login "https://${HARBOR_HOST}" -u "${HARBOR_USER}" --password-stdin 2>&1 || \
-      echo "${HARBOR_PASSWORD}" | docker login "http://${HARBOR_HOST}" -u "${HARBOR_USER}" --password-stdin || \
-      docker login "http://${HARBOR_HOST}" -u "${HARBOR_USER}" -p "${HARBOR_PASSWORD}"
       echo "HARBOR_URL=${HARBOR_URL}"
       echo "HARBOR_PROJECT=${HARBOR_PROJECT}"
   script:
     - |
       HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
-      IMAGE_SOURCE="bitnami/mariadb:11.4.2"
-      IMAGE_DEST="${HARBOR_HOST}/${HARBOR_PROJECT}/mariadb:11.4.2"
+      IMAGE_SOURCE="docker://docker.io/bitnami/mariadb:11.4.2"
+      # Use HTTP for Harbor to avoid certificate issues
+      IMAGE_DEST="docker://${HARBOR_HOST}/${HARBOR_PROJECT}/mariadb:11.4.2"
       
-      echo "Pulling ${IMAGE_SOURCE} from Docker Hub..."
-      docker pull ${IMAGE_SOURCE}
+      echo "Copying ${IMAGE_SOURCE} to Harbor..."
+      skopeo copy \
+        --src-tls-verify=false \
+        --dest-tls-verify=false \
+        --dest-creds="${HARBOR_USER}:${HARBOR_PASSWORD}" \
+        ${IMAGE_SOURCE} \
+        ${IMAGE_DEST}
       
-      echo "Tagging image for Harbor..."
-      docker tag ${IMAGE_SOURCE} ${IMAGE_DEST}
-      
-      echo "Pushing image to Harbor (using HTTP due to certificate config)..."
-      docker push ${IMAGE_DEST}
-      
-      echo "Image pushed successfully: ${IMAGE_DEST}"
+      echo "Image copied successfully: ${IMAGE_DEST}"
   tags:
     - atd
   only:
