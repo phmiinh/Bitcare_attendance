@@ -56,9 +56,10 @@ pull-mariadb-image:
       echo "Image pushed successfully: ${IMAGE_DEST}"
   tags:
     - atd
-  when: manual  # Run manually when needed (can change to 'on_success' to run automatically)
   only:
     - main
+  # Job will run automatically on every push to main branch
+  # To run manually only, add: when: manual
 
 .kaniko-template:
   image:
