@@ -42,7 +42,13 @@ stages:
       fi
     - 'echo "HARBOR_URL=${HARBOR_URL}"'
     - 'echo "HARBOR_USER=${HARBOR_USER}"'
+    - 'echo "HARBOR_PROJECT=${HARBOR_PROJECT}"'
     - 'cat /kaniko/.docker/config.json | sed "s/${HARBOR_PASSWORD}/***MASKED***/g"'
+    # Test Harbor connection
+    - |
+      HARBOR_HOST=$(echo "${HARBOR_URL}" | sed 's|^https\?://||' | sed 's|/.*||')
+      echo "Testing Harbor connection to ${HARBOR_HOST}..."
+      curl -k -u "${HARBOR_USER}:${HARBOR_PASSWORD}" "https://${HARBOR_HOST}/api/v2.0/projects/${HARBOR_PROJECT}" || echo "Warning: Could not verify project access"
 
 build-api:
   stage: build
