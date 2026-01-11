@@ -31,6 +31,8 @@ ENV PORT=3000
 
 # Copy only the necessary runtime files from the standalone build
 # This structure matches Next.js standalone output
+# Next.js standalone includes compiled server code in .next/standalone/.next/server/
+# API routes in app/api/ are compiled to .next/server/app/api/
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./public/_next/static
 COPY --from=builder /app/public ./public
