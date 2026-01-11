@@ -12,7 +12,7 @@ const nextConfig = {
   async rewrites() {
     // In Kubernetes, backend service name is 'api' in namespace 'bitcare-attendance'
     // Use environment variable for flexibility, fallback to service name in cluster
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://api:80'
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://api:8080'
     return [
       {
         source: '/api/:path*',

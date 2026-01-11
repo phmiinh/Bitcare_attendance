@@ -28,12 +28,17 @@ async function proxyRequest(
   method: string
 ) {
   // Get backend API URL from environment variable, fallback to service name in cluster
-  const apiUrl = process.env.API_URL || 'http://api:80'
+  // In Kubernetes, service name 'api' resolves to http://api:8080 within the same namespace
+  const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://api:8080'
   const path = pathSegments.join('/')
   const url = new URL(request.url)
   
-  // Build backend URL
-  const backendUrl = `${apiUrl}/api/v1/${path}${url.search}`
+  // Build backend URL - ensure we use the correct format
+  // If apiUrl doesn't have protocol, add http://
+  const backendBase = apiUrl.startsWith('http') ? apiUrl : `http://${apiUrl}`
+  const backendUrl = `${backendBase}/api/v1/${path}${url.search}`
+  
+  console.log(`[API Proxy] ${method} ${path} -> ${backendUrl}`)
   
   try {
     // Get request body if present
