@@ -9,17 +9,8 @@ const __dirname = path.dirname(__filename)
 const nextConfig = {
   // Enable standalone output for smaller Docker images
   output: 'standalone',
-  async rewrites() {
-    // In Kubernetes, backend service name is 'api' in namespace 'bitcare-attendance'
-    // Use environment variable for flexibility, fallback to service name in cluster
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://api:8080'
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiUrl}/api/:path*`,
-      },
-    ]
-  },
+  // Note: API routes in app/api/ are used to proxy requests to backend
+  // Rewrites are not needed as we use API route handlers instead
   // Note: we run dev with `next dev --webpack` (see package.json) to avoid Turbopack issues.
   // Keeping this here is harmless, but webpack config below is what fixes the current issue.
   turbopack: {
