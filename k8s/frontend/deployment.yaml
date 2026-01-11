@@ -40,6 +40,9 @@ spec:
           env:
             - name: PORT
               value: "3000"
+            # Backend API URL - use service name in cluster
+            - name: API_URL
+              value: "http://api:80"
           resources:
             requests:
               cpu: "100m"

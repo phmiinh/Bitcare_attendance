@@ -10,10 +10,13 @@ const nextConfig = {
   // Enable standalone output for smaller Docker images
   output: 'standalone',
   async rewrites() {
+    // In Kubernetes, backend service name is 'api' in namespace 'bitcare-attendance'
+    // Use environment variable for flexibility, fallback to service name in cluster
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || 'http://api:80'
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8080/api/:path*',
+        destination: `${apiUrl}/api/:path*`,
       },
     ]
   },
