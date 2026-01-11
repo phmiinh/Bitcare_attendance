@@ -40,9 +40,12 @@ func NewMySQL(cfg *config.Config, log *zap.Logger) *gorm.DB {
 		log.Fatal("failed to get sql.DB", zap.Error(err))
 	}
 
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
+	// Tối ưu connection pool cho K8s environment
+	// Với 2 replicas backend, mỗi replica cần connection pool hợp lý
+	sqlDB.SetMaxIdleConns(5)  // Giảm idle conns để tránh chiếm quá nhiều DB connections
+	sqlDB.SetMaxOpenConns(50) // Giảm max open conns (2 replicas x 50 = 100 total, phù hợp với MariaDB)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetConnMaxIdleTime(10 * time.Minute) // Đóng idle connections sau 10 phút
 
 	if cfg.IsDevelopment() {
 		// Debug() enables detailed SQL logging

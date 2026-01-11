@@ -18,7 +18,8 @@ func defaultConfig() Config {
 			User:     "root",
 			Password: "",
 			Name:     "time_attendance",
-			Params:   "charset=utf8mb4&parseTime=True&loc=Local",
+			// Thêm timeout settings để tránh query bị treo
+			Params:   "charset=utf8mb4&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
 		},
 
 		CORSAllowOrigins: "http://localhost:3000",

@@ -2,35 +2,42 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // Proxy API requests to backend service
 // This route runs on Node.js runtime (not Edge), so it can connect to internal K8s services
-export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxyRequest(request, params.path, 'GET')
+// Fix: Next.js 16 params có thể là Promise, cần await
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
+  const resolvedParams = await Promise.resolve(params)
+  return proxyRequest(request, resolvedParams.path || [], 'GET')
 }
 
-export async function POST(request: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxyRequest(request, params.path, 'POST')
+export async function POST(request: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
+  const resolvedParams = await Promise.resolve(params)
+  return proxyRequest(request, resolvedParams.path || [], 'POST')
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxyRequest(request, params.path, 'PUT')
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
+  const resolvedParams = await Promise.resolve(params)
+  return proxyRequest(request, resolvedParams.path || [], 'PUT')
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxyRequest(request, params.path, 'PATCH')
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
+  const resolvedParams = await Promise.resolve(params)
+  return proxyRequest(request, resolvedParams.path || [], 'PATCH')
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { path: string[] } }) {
-  return proxyRequest(request, params.path, 'DELETE')
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ path: string[] }> | { path: string[] } }) {
+  const resolvedParams = await Promise.resolve(params)
+  return proxyRequest(request, resolvedParams.path || [], 'DELETE')
 }
 
 async function proxyRequest(
   request: NextRequest,
-  pathSegments: string[],
+  pathSegments: string[] | undefined,
   method: string
 ) {
   // Get backend API URL from environment variable
   // In Kubernetes, this is set in deployment.yaml: API_URL=http://api:8080
   const apiUrl = process.env.API_URL || 'http://api:8080'
-  const path = pathSegments.join('/')
+  // Fix: Kiểm tra pathSegments trước khi gọi join()
+  const path = (pathSegments && pathSegments.length > 0) ? pathSegments.join('/') : ''
   const url = new URL(request.url)
   
   // Build backend URL
@@ -75,13 +82,32 @@ async function proxyRequest(
     }
     
     // Forward the request to backend
-    const response = await fetch(backendUrl, {
-      method,
-      headers,
-      body: body || undefined,
-      // Don't follow redirects automatically
-      redirect: 'manual',
-    })
+    // Fix: Thêm timeout để tránh query bị treo
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 giây timeout
+    
+    let response: Response
+    try {
+      response = await fetch(backendUrl, {
+        method,
+        headers,
+        body: body || undefined,
+        redirect: 'manual',
+        signal: controller.signal,
+      })
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        console.error('[API Proxy] Request timeout after 30s')
+        return NextResponse.json(
+          { error: { code: 'timeout', message: 'Backend request timeout' } },
+          { status: 504 }
+        )
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
     
     // Get response body
     const responseBody = await response.text()

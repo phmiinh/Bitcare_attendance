@@ -57,6 +57,9 @@ spec:
                 secretKeyRef:
                   name: mysql-credentials
                   key: password
+            # Thêm timeout settings để tránh query bị treo
+            - name: DB_PARAMS
+              value: "charset=utf8mb4&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s"
           resources:
             requests:
               cpu: "100m"
