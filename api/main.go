@@ -9,8 +9,9 @@ import (
 
 	"time-attendance-be/internal/app/bootstrap"
 	"time-attendance-be/internal/config"
+
+	_ "github.com/joho/godotenv/autoload"
 )
-import _ "github.com/joho/godotenv/autoload"
 
 func main() {
 	cfg := config.Load()
