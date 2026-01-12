@@ -28,13 +28,58 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   return proxyRequest(request, resolvedParams.path || [], 'DELETE')
 }
 
+// Cache pod IP để tránh resolve nhiều lần
+let cachedPodIP: string | null = null
+let podIPResolveTime: number = 0
+const POD_IP_CACHE_TTL = 60000 // Cache 1 phút
+
+// Helper function to resolve pod IP từ headless service
+// Với headless service, DNS sẽ tự động resolve thành pod IP khi query
+async function resolvePodIPFromDNS(serviceName: string, namespace: string): Promise<string | null> {
+  try {
+    // Sử dụng Node.js dns module để resolve DNS
+    const dns = require('dns')
+    const { promisify } = require('util')
+    const resolve4 = promisify(dns.resolve4)
+    
+    const fqdn = `${serviceName}.${namespace}.svc.cluster.local`
+    const addresses = await resolve4(fqdn)
+    
+    // Lấy pod IP đầu tiên
+    if (addresses && addresses.length > 0) {
+      return addresses[0]
+    }
+    return null
+  } catch (error: any) {
+    console.warn(`[API Proxy] DNS resolve failed: ${error?.message}`)
+    return null
+  }
+}
+
 // Helper function to get default API URL based on environment
-function getDefaultApiUrl(): string {
+async function getDefaultApiUrl(): Promise<string> {
   // Check if running in Kubernetes (has KUBERNETES_SERVICE_HOST)
   if (process.env.KUBERNETES_SERVICE_HOST) {
-    // Use FQDN for better DNS reliability
     const namespace = process.env.KUBERNETES_NAMESPACE || 'bitcare-attendance'
-    return `http://api.${namespace}.svc.cluster.local:8080` // K8s FQDN service name
+    
+    // Kiểm tra cache
+    const now = Date.now()
+    if (cachedPodIP && (now - podIPResolveTime) < POD_IP_CACHE_TTL) {
+      return `http://${cachedPodIP}:8080`
+    }
+    
+    // Resolve pod IP từ headless service DNS
+    const podIP = await resolvePodIPFromDNS('api', namespace)
+    if (podIP) {
+      cachedPodIP = podIP
+      podIPResolveTime = now
+      console.log(`[API Proxy] Resolved backend pod IP: ${podIP}`)
+      return `http://${podIP}:8080` // Dùng pod IP trực tiếp
+    }
+    
+    // Fallback: dùng service name (headless service sẽ resolve thành pod IP)
+    console.warn(`[API Proxy] Using service name as fallback`)
+    return `http://api.${namespace}.svc.cluster.local:8080`
   }
   // Local development - use localhost
   return 'http://localhost:8080'
@@ -47,10 +92,10 @@ async function proxyRequest(
 ) {
   // Get backend API URL from environment variable
   // - Local dev: Set API_URL=http://localhost:8080 in .env.local
-  // - Kubernetes: Set in deployment.yaml: API_URL=http://api.bitcare-attendance.svc.cluster.local:8080
+  // - Kubernetes: Auto-resolve pod IP từ headless service
   // - Fallback: Auto-detect environment and use appropriate default
-  const apiUrl = process.env.API_URL || getDefaultApiUrl()
-  const defaultApiUrl = getDefaultApiUrl() // Store for error logging
+  const apiUrl = process.env.API_URL || await getDefaultApiUrl()
+  const defaultApiUrl = await getDefaultApiUrl() // Store for error logging
   // Fix: Kiểm tra pathSegments trước khi gọi join()
   const path = (pathSegments && pathSegments.length > 0) ? pathSegments.join('/') : ''
   const url = new URL(request.url)

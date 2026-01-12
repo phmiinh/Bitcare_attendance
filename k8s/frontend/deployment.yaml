@@ -47,10 +47,12 @@ spec:
           env:
             - name: PORT
               value: "3000"
-            # Backend API URL - use FQDN service name for better DNS reliability
-            # FQDN format: <service-name>.<namespace>.svc.cluster.local
-            - name: API_URL
-              value: "http://api.bitcare-attendance.svc.cluster.local:8080"
+            # Backend API URL - sẽ tự động resolve pod IP từ headless service
+            # Không cần set API_URL, code sẽ tự động resolve pod IP
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           resources:
             requests:
               cpu: "100m"

@@ -8,7 +8,8 @@ metadata:
     app.kubernetes.io/instance: production
     app.kubernetes.io/part-of: bitcare-attendance
 spec:
-  type: ClusterIP
+  # Headless service: DNS sẽ trả về pod IPs trực tiếp thay vì ClusterIP
+  clusterIP: None
   selector:
     app.kubernetes.io/name: bitcare-attendance-api
     app.kubernetes.io/instance: production
