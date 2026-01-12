@@ -40,6 +40,9 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            # HTTP server address - explicitly bind to all interfaces
+            - name: HTTP_ADDR
+              value: "0.0.0.0:8080"
             # Database connection (MySQL/MariaDB) - api/internal/config expects these envs
             - name: DB_HOST
               value: "mysql"

@@ -28,64 +28,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   return proxyRequest(request, resolvedParams.path || [], 'DELETE')
 }
 
-// Cache pod IP để tránh resolve nhiều lần
-let cachedPodIP: string | null = null
-let podIPResolveTime: number = 0
-const POD_IP_CACHE_TTL = 60000 // Cache 1 phút
-
-// Invalidate cache khi connection failed
-function invalidatePodIPCache() {
-  cachedPodIP = null
-  podIPResolveTime = 0
-  console.log('[API Proxy] Invalidated pod IP cache due to connection failure')
-}
-
-// Helper function to resolve pod IP từ headless service
-// Với headless service, DNS sẽ tự động resolve thành pod IP khi query
-async function resolvePodIPFromDNS(serviceName: string, namespace: string): Promise<string | null> {
-  try {
-    // Sử dụng Node.js dns module để resolve DNS
-    const dns = require('dns')
-    const { promisify } = require('util')
-    const resolve4 = promisify(dns.resolve4)
-    
-    const fqdn = `${serviceName}.${namespace}.svc.cluster.local`
-    const addresses = await resolve4(fqdn)
-    
-    // Lấy pod IP đầu tiên
-    if (addresses && addresses.length > 0) {
-      return addresses[0]
-    }
-    return null
-  } catch (error: any) {
-    console.warn(`[API Proxy] DNS resolve failed: ${error?.message}`)
-    return null
-  }
-}
-
 // Helper function to get default API URL based on environment
-async function getDefaultApiUrl(): Promise<string> {
+function getDefaultApiUrl(): string {
   // Check if running in Kubernetes (has KUBERNETES_SERVICE_HOST)
   if (process.env.KUBERNETES_SERVICE_HOST) {
+    // Use ClusterIP service name - Kubernetes sẽ tự động route đến pod ready
     const namespace = process.env.KUBERNETES_NAMESPACE || 'bitcare-attendance'
-    
-    // Kiểm tra cache
-    const now = Date.now()
-    if (cachedPodIP && (now - podIPResolveTime) < POD_IP_CACHE_TTL) {
-      return `http://${cachedPodIP}:8080`
-    }
-    
-    // Resolve pod IP từ headless service DNS
-    const podIP = await resolvePodIPFromDNS('api', namespace)
-    if (podIP) {
-      cachedPodIP = podIP
-      podIPResolveTime = now
-      console.log(`[API Proxy] Resolved backend pod IP: ${podIP}`)
-      return `http://${podIP}:8080` // Dùng pod IP trực tiếp
-    }
-    
-    // Fallback: dùng service name (headless service sẽ resolve thành pod IP)
-    console.warn(`[API Proxy] Using service name as fallback`)
     return `http://api.${namespace}.svc.cluster.local:8080`
   }
   // Local development - use localhost
@@ -101,32 +49,20 @@ async function proxyRequest(
   const path = (pathSegments && pathSegments.length > 0) ? pathSegments.join('/') : ''
   const url = new URL(request.url)
   
-  // Retry logic với cache invalidation
-  const maxRetries = 2
-  let lastError: any = null
+  // Get backend API URL from environment variable
+  // - Local dev: Set API_URL=http://localhost:8080 in .env.local
+  // - Kubernetes: Use service name - Kubernetes sẽ tự động route đến pod ready
+  // - Fallback: Auto-detect environment and use appropriate default
+  const apiUrl = process.env.API_URL || getDefaultApiUrl()
+  const defaultApiUrl = getDefaultApiUrl() // Store for error logging
   
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    // Invalidate cache nếu đây là retry sau connection error
-    if (attempt > 0 && lastError?.code === 'ECONNREFUSED') {
-      invalidatePodIPCache()
-      console.log(`[API Proxy] Retry attempt ${attempt}/${maxRetries} - invalidated cache and resolving new pod IP`)
-    }
-    
-    // Get backend API URL (có thể resolve lại pod IP mới sau khi invalidate cache)
-    const apiUrl = process.env.API_URL || await getDefaultApiUrl()
-    const defaultApiUrl = await getDefaultApiUrl() // Store for error logging
-    
-    // Build backend URL
-    const backendBase = apiUrl.startsWith('http') ? apiUrl : `http://${apiUrl}`
-    const backendUrl = `${backendBase}/api/v1/${path}${url.search}`
-    
-    if (attempt === 0) {
-      console.log(`[API Proxy] ${method} ${path} -> ${backendUrl}`)
-    } else {
-      console.log(`[API Proxy] Retry ${attempt}/${maxRetries} ${method} ${path} -> ${backendUrl}`)
-    }
-    
-    try {
+  // Build backend URL
+  const backendBase = apiUrl.startsWith('http') ? apiUrl : `http://${apiUrl}`
+  const backendUrl = `${backendBase}/api/v1/${path}${url.search}`
+  
+  console.log(`[API Proxy] ${method} ${path} -> ${backendUrl}`)
+  
+  try {
       // Get request body if present
       let body: string | undefined
       if (method !== 'GET' && method !== 'HEAD' && method !== 'DELETE') {
@@ -218,40 +154,19 @@ async function proxyRequest(
         nextResponse.headers.append('Set-Cookie', cookie)
       })
       
-      return nextResponse
+    return nextResponse
     } catch (error: any) {
-      lastError = error
-      
-      // Connection refused - retry với pod IP mới nếu còn attempt
-      if ((error?.code === 'ECONNREFUSED' || error?.cause?.code === 'ECONNREFUSED') && attempt < maxRetries) {
-        const connError = error.cause || error
-        console.warn(`[API Proxy] Connection refused to ${connError.address}:${connError.port}, will retry with new pod IP...`)
-        
-        // Wait một chút trước khi retry
-        await new Promise(resolve => setTimeout(resolve, 100 * attempt))
-        continue // Retry với pod IP mới
-      }
-      
-      // Nếu hết retry hoặc không phải connection refused, break để xử lý error ở ngoài
-      break
-    }
-  }
-  
-  // Nếu đến đây nghĩa là đã hết retry nhưng vẫn fail
-  // Xử lý error như bình thường
-  if (lastError) {
-    const error = lastError
     // Log chi tiết lỗi để debug
     const isLocalDev = !process.env.KUBERNETES_SERVICE_HOST
     const errorDetails: any = {
-      backendUrl: lastError?.cause?.address || 'unknown',
+      backendUrl,
       method,
       path,
       apiUrlEnv: process.env.API_URL,
+      defaultApiUrl: defaultApiUrl,
       environment: isLocalDev ? 'local' : 'kubernetes',
       errorName: error?.name,
       errorMessage: error?.message,
-      retries: maxRetries,
     }
     
     // Thêm thông tin connection/DNS error nếu có
@@ -292,29 +207,26 @@ async function proxyRequest(
       )
     }
     
-    // Handle connection refused errors (sau khi đã retry)
+    // Handle connection refused errors
     if (error?.code === 'ECONNREFUSED' || error?.cause?.code === 'ECONNREFUSED') {
       const connError = error.cause || error
       const suggestion = isLocalDev
         ? 'Local dev: Ensure backend is running on localhost:8080'
-        : 'K8s: Backend pod may have restarted. Check pod status: kubectl get pods -n bitcare-attendance -l app.kubernetes.io/name=bitcare-attendance-api'
+        : 'K8s: Check if backend pods are running and service endpoints are configured. Run: kubectl get pods -n bitcare-attendance -l app.kubernetes.io/name=bitcare-attendance-api && kubectl get endpoints api -n bitcare-attendance'
       
-      console.error('[API Proxy] Connection refused after retries:', {
+      console.error('[API Proxy] Connection refused:', {
         ...errorDetails,
         resolvedIP: connError.address,
         port: connError.port,
         suggestion
       })
       
-      // Invalidate cache để lần request sau sẽ resolve lại
-      invalidatePodIPCache()
-      
       return NextResponse.json(
         { 
           error: { 
             code: 'backend_unavailable', 
             message: 'Backend service is not available.',
-            details: `Cannot connect to ${connError.address || 'backend'}:${connError.port || 8080} after ${maxRetries} retries. Pod may have restarted.`,
+            details: `Cannot connect to ${connError.address || apiUrl}:${connError.port || 8080}`,
             suggestion
           } 
         },
