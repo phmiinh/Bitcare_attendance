@@ -7,7 +7,7 @@ func defaultConfig() Config {
 		Env:      "development",
 		HTTPAddr: ":8080",
 
-		AppTZ: "Asia/Bangkok",
+		AppTZ: "Asia/Ho_Chi_Minh", // Match với timezone của K8s nodes
 
 		DefaultAdminEmail:    "admin@local.test",
 		DefaultAdminPassword: "Admin@12345",
@@ -18,8 +18,9 @@ func defaultConfig() Config {
 			User:     "root",
 			Password: "",
 			Name:     "time_attendance",
-			// Thêm timeout settings để tránh query bị treo
-			Params:   "charset=utf8mb4&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
+			// Thêm timeout settings và timezone để tránh query bị treo và lệch giờ
+			// loc=Asia%2FHo_Chi_Minh: đảm bảo timezone nhất quán với K8s nodes (+07)
+			Params: "charset=utf8mb4&parseTime=True&loc=Asia%2FHo_Chi_Minh&timeout=10s&readTimeout=30s&writeTimeout=30s",
 		},
 
 		CORSAllowOrigins: "http://localhost:3000",

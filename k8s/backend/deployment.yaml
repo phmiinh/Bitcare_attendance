@@ -57,9 +57,15 @@ spec:
                 secretKeyRef:
                   name: mysql-credentials
                   key: password
-            # Thêm timeout settings để tránh query bị treo
+            # Thêm timeout settings và timezone để tránh query bị treo và lệch giờ
             - name: DB_PARAMS
-              value: "charset=utf8mb4&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s"
+              value: "charset=utf8mb4&parseTime=True&loc=Asia%2FHo_Chi_Minh&timeout=10s&readTimeout=30s&writeTimeout=30s"
+            # Set timezone cho app (Asia/Ho_Chi_Minh = UTC+7, match với K8s nodes)
+            - name: APP_TZ
+              value: "Asia/Ho_Chi_Minh"
+            # Set TZ environment variable cho container (match với node timezone)
+            - name: TZ
+              value: "Asia/Ho_Chi_Minh"
           resources:
             requests:
               cpu: "100m"

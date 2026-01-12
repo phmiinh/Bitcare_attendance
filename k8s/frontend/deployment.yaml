@@ -27,6 +27,13 @@ spec:
         app.kubernetes.io/part-of: bitcare-attendance
     spec:
       terminationGracePeriodSeconds: 30
+      # DNS configuration để đảm bảo DNS resolution hoạt động tốt
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "5"
+          - name: edns0
       imagePullSecrets:
         - name: harbor-regcred
       containers:
@@ -40,9 +47,10 @@ spec:
           env:
             - name: PORT
               value: "3000"
-            # Backend API URL - use service name in cluster
+            # Backend API URL - use FQDN service name for better DNS reliability
+            # FQDN format: <service-name>.<namespace>.svc.cluster.local
             - name: API_URL
-              value: "http://api:8080"
+              value: "http://api.bitcare-attendance.svc.cluster.local:8080"
           resources:
             requests:
               cpu: "100m"

@@ -45,6 +45,9 @@ spec:
                 secretKeyRef:
                   name: mysql-credentials
                   key: root-password
+            # Set timezone cho MariaDB container (match với K8s nodes)
+            - name: TZ
+              value: "Asia/Ho_Chi_Minh"
           resources:
             requests:
               cpu: "100m"

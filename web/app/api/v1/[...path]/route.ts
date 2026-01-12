@@ -28,14 +28,29 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   return proxyRequest(request, resolvedParams.path || [], 'DELETE')
 }
 
+// Helper function to get default API URL based on environment
+function getDefaultApiUrl(): string {
+  // Check if running in Kubernetes (has KUBERNETES_SERVICE_HOST)
+  if (process.env.KUBERNETES_SERVICE_HOST) {
+    // Use FQDN for better DNS reliability
+    const namespace = process.env.KUBERNETES_NAMESPACE || 'bitcare-attendance'
+    return `http://api.${namespace}.svc.cluster.local:8080` // K8s FQDN service name
+  }
+  // Local development - use localhost
+  return 'http://localhost:8080'
+}
+
 async function proxyRequest(
   request: NextRequest,
   pathSegments: string[] | undefined,
   method: string
 ) {
   // Get backend API URL from environment variable
-  // In Kubernetes, this is set in deployment.yaml: API_URL=http://api:8080
-  const apiUrl = process.env.API_URL || 'http://api:8080'
+  // - Local dev: Set API_URL=http://localhost:8080 in .env.local
+  // - Kubernetes: Set in deployment.yaml: API_URL=http://api.bitcare-attendance.svc.cluster.local:8080
+  // - Fallback: Auto-detect environment and use appropriate default
+  const apiUrl = process.env.API_URL || getDefaultApiUrl()
+  const defaultApiUrl = getDefaultApiUrl() // Store for error logging
   // Fix: Kiểm tra pathSegments trước khi gọi join()
   const path = (pathSegments && pathSegments.length > 0) ? pathSegments.join('/') : ''
   const url = new URL(request.url)
@@ -139,12 +154,96 @@ async function proxyRequest(
     })
     
     return nextResponse
-  } catch (error) {
-    console.error('[API Proxy] Error:', error)
-    console.error('[API Proxy] Backend URL:', backendUrl)
-    console.error('[API Proxy] API_URL env:', process.env.API_URL)
+    } catch (error: any) {
+    // Log chi tiết lỗi để debug
+    const isLocalDev = !process.env.KUBERNETES_SERVICE_HOST
+    const errorDetails: any = {
+      backendUrl,
+      method,
+      path,
+      apiUrlEnv: process.env.API_URL,
+      defaultApiUrl: defaultApiUrl,
+      environment: isLocalDev ? 'local' : 'kubernetes',
+      errorName: error?.name,
+      errorMessage: error?.message,
+    }
+    
+    // Thêm thông tin connection/DNS error nếu có
+    if (error?.code) errorDetails.errorCode = error.code
+    if (error?.cause) {
+      errorDetails.cause = {
+        code: error.cause.code,
+        address: error.cause.address,
+        port: error.cause.port,
+        syscall: error.cause.syscall,
+        hostname: error.cause.hostname,
+      }
+    }
+    
+    // Handle DNS resolution errors với suggestion
+    if (error?.code === 'ENOTFOUND' || error?.cause?.code === 'ENOTFOUND') {
+      const dnsError = error.cause || error
+      const suggestion = isLocalDev
+        ? 'Local dev: Create web/.env.local with API_URL=http://localhost:8080'
+        : 'K8s DNS issue: Try using FQDN: api.bitcare-attendance.svc.cluster.local:8080 or check CoreDNS'
+      
+      console.error('[API Proxy] DNS resolution failed:', {
+        ...errorDetails,
+        hostname: dnsError.hostname || 'api',
+        suggestion
+      })
+      
+      return NextResponse.json(
+        { 
+          error: { 
+            code: 'dns_resolution_failed', 
+            message: `Cannot resolve hostname: ${dnsError.hostname || 'api'}`,
+            details: 'DNS lookup failed. Check API_URL configuration.',
+            suggestion
+          } 
+        },
+        { status: 503 }
+      )
+    }
+    
+    // Handle connection refused errors
+    if (error?.code === 'ECONNREFUSED' || error?.cause?.code === 'ECONNREFUSED') {
+      const connError = error.cause || error
+      const suggestion = isLocalDev
+        ? 'Local dev: Ensure backend is running on localhost:8080'
+        : 'K8s: Check if backend pods are running and service endpoints are configured'
+      
+      console.error('[API Proxy] Connection refused:', {
+        ...errorDetails,
+        resolvedIP: connError.address,
+        port: connError.port,
+        suggestion
+      })
+      
+      return NextResponse.json(
+        { 
+          error: { 
+            code: 'backend_unavailable', 
+            message: 'Backend service is not available.',
+            details: `Cannot connect to ${connError.address || apiUrl}:${connError.port || 8080}`,
+            suggestion
+          } 
+        },
+        { status: 503 }
+      )
+    }
+    
+    console.error('[API Proxy] Unexpected error:', errorDetails)
+    console.error('[API Proxy] Full error:', error)
+    
     return NextResponse.json(
-      { error: { code: 'proxy_error', message: 'Failed to proxy request to backend' } },
+      { 
+        error: { 
+          code: 'proxy_error', 
+          message: 'Failed to proxy request to backend',
+          details: error?.message || 'Unknown error occurred'
+        } 
+      },
       { status: 502 }
     )
   }
